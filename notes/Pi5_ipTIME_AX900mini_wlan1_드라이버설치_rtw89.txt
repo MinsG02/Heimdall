@@ -1,0 +1,61 @@
+라즈베리파이5 + ipTIME AX900mini를 wlan1로 인식시키는 전체 과정 (rtw89 DKMS)
+
+
+1) 동글/커널 확인
+lsusb | grep -i realtek
+uname -r
+
+2) 빌드 환경(필수 패키지/헤더)
+sudo apt update
+sudo apt install -y git dkms build-essential linux-headers-$(uname -r)
+
+3) (선택) 이전에 깔았던 Realtek DKMS 드라이버가 있으면 제거(충돌 방지) - :난 했음"
+sudo dkms status
+# 예전에 rtl8852bu가 남아있으면:
+sudo dkms remove rtl8852bu/1.19.14-127 --all
+sudo modprobe -r 8852bu 2>/dev/null || true 
+
+4) rtw89 DKMS 설치 + 펌웨어 설치
+cd ~
+git clone https://github.com/morrownr/rtw89.git
+cd rtw89
+sudo make cleanup_target_system
+sudo dkms install $PWD    //인스톨 오래걸림 기다릴 것
+sudo make install_fw
+sudo cp -v rtw89.conf /etc/modprobe.d/
+sudo reboot
+
+5) 재부팅 후 성공 확인
+iw dev
+ip link | grep -E 'wl|wlan'
+
+
+✅ 여기서 아래 중 하나가 뜨면 성공:
+
+phy#1 Interface wlan1 ...
+
+또는 Interface wlx... (환경에 따라 이름이 wlx로 뜰 때도 있음)
+
+
+(추천) “항상 작동” 안정화 체크 3개
+A) 재부팅해도 계속 뜨는지
+sudo reboot
+iw dev
+
+B) 모듈이 로드됐는지
+lsmod | grep -E 'rtw89|8851|8831|usb'
+
+C) 동글을 뺐다 꽂아도 돌아오는지(핵심)
+
+뽑았다가 다시 꽂고:
+
+dmesg | egrep -i '0bda|b831|rtw|rtl|firmware' | tail -n 120
+iw dev
+
+
+여기서 wlan1이 다시 뜨면 “항상 작동” OK.
+
+==============================================================
+여기까지 하니깐, WiFi 물리링크 2개가 잡히더라. 
+그래서 VNC연결용, ESP 통신 전용 링크 구성할 수있게 되었다. 테스트 필요
+
