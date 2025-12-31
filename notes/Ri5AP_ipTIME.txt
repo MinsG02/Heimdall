@@ -93,3 +93,18 @@ Bash
 
 ip addr show wlan1
 출력 결과 중간에 inet 192.168.50.1/24 라는 부분이 보이면 성공입니다. 이제 ESP32 5대 모두 전원을 켜면 자동으로 Heimdall_Net에 붙을 것이고, 라즈베리파이는 항상 192.168.50.1이라는 주소를 가지게 됩니다.
+
+
+
+
+
+ESP32는 2.4 Ghz 대역 사용
+# 1. 핫스팟 끄기
+sudo nmcli con down heimdall_hotspot
+
+# 2. 2.4GHz 채널 6번으로 설정 변경
+sudo nmcli con modify heimdall_hotspot 802-11-wireless.band bg 802-11-wireless.channel 6
+
+# 3. 다시 켜기
+sudo nmcli con up heimdall_hotspot
+아래로 변경할것
