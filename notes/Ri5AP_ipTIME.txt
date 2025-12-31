@@ -1,0 +1,95 @@
+wlan0 원격 통신 링크
+라즈베리파이5 내장
+
+
+wlan1 ESP32로 통신
+ipTIME Realtek 칩셋
+확장 WiFi 인터페이스
+
+좋습니다. 헷갈리지 않게 라즈베리파이(서버/공유기) 쪽 터미널 명령어와 ESP32(클라이언트) 쪽 코드를 명확히 분리해서 정리해 드립니다.
+
+그대로 복사해서 진행하시면 됩니다.
+
+1. 라즈베리파이 설정 (터미널)
+라즈베리파이를 **공유기(Hotspot)**로 만들고 고정 IP를 부여하는 과정입니다. 터미널을 열고 순서대로 입력하세요.
+
+1. 라즈베리파이 설정 (터미널)
+라즈베리파이를 **공유기(Hotspot)**로 만들고 고정 IP를 부여하는 과정입니다. 터미널을 열고 순서대로 입력하세요.
+
+① 핫스팟 연결 생성 (이름: Heimdall_Net)
+# 'heimdall_hotspot'이라는 설정 파일을 만들고 SSID를 부여합니다.
+sudo nmcli con add type wifi ifname wlan1 con-name heimdall_hotspot autoconnect yes ssid "Heimdall_Net"
+
+② 모드 설정 및 고정 IP 할당 (192.168.50.1)
+# 핫스팟 모드(ap)로 설정하고, 라즈베리파이 본인의 IP를 192.168.50.1로 고정합니다.
+sudo nmcli con modify heimdall_hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared ipv4.addresses 192.168.50.1/24
+
+③ 비밀번호 설정 (password1234)
+# 보안 방식을 WPA2로 설정하고 비밀번호를 입력합니다.
+sudo nmcli con modify heimdall_hotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "password1234"
+
+④ [매우 중요] ipTIME 동글(MAC 주소)에 설정 고정 재부팅 시 장치 이름이 바뀌어도 ipTIME 동글이 무조건 이 핫스팟을 담당하도록 합니다.
+sudo nmcli con modify heimdall_hotspot 802-11-wireless.mac-address b0:38:6c:f8:a7:cb
+
+⑤ 핫스팟 실행
+sudo nmcli con up heimdall_hotspot
+
+
+
+
+2. ESP32 설정 (아두이노 코드)
+ESP32가 라즈베리파이가 만든 와이파이에 접속하고 데이터를 보낼 준비를 하는 코드입니다.
+
+C++
+
+#include <WiFi.h>
+
+// 1. 라즈베리파이 핫스팟 정보
+const char* ssid = "Heimdall_Net";
+const char* password = "password1234";
+
+// 2. 데이터를 보낼 라즈베리파이의 고정 IP
+const char* serverIP = "192.168.50.1"; 
+const int serverPort = 8080; // (예시) 라즈베리파이 서버 포트
+
+void setup() {
+  Serial.begin(115200);
+
+  // 와이파이 연결 시작
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+
+  // 연결될 때까지 대기
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected!");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void loop() {
+  // 여기서 serverIP(192.168.50.1)로 소켓 통신이나 MQTT 메시지를 보내면 됩니다.
+  
+  /* (예시: TCP 연결 확인)
+  WiFiClient client;
+  if (client.connect(serverIP, serverPort)) {
+    client.println("Hello from ESP32!");
+    client.stop();
+  }
+  */
+  
+  delay(1000);
+}
+3. 최종 확인 방법
+설정을 다 하신 후, 라즈베리파이 터미널에서 아래 명령어를 쳐보세요.
+
+Bash
+
+ip addr show wlan1
+출력 결과 중간에 inet 192.168.50.1/24 라는 부분이 보이면 성공입니다. 이제 ESP32 5대 모두 전원을 켜면 자동으로 Heimdall_Net에 붙을 것이고, 라즈베리파이는 항상 192.168.50.1이라는 주소를 가지게 됩니다.
