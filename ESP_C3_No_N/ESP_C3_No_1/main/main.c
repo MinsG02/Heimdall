@@ -75,21 +75,29 @@ void wifi_init_sta(void)
 }
 
 // 3. NTP 시간 동기화 (v5.x 최신 API 적용)
+// 3. NTP 시간 동기화 (수정됨)
 void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "시간 동기화(SNTP) 시작...");
     
-    // [수정] esp_sntp_... 함수 사용 (이전 sntp_... 는 Deprecated 됨)
     esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, RPI_IP_ADDR); 
     esp_sntp_init();
     
-    // 시간이 잡힐 때까지 잠시 대기 (최대 10초)
+    // [중요] 시간이 잡힐 때까지 무한 대기 (TDOA 필수)
+    time_t now = 0;
+    struct tm timeinfo = { 0 };
     int retry = 0;
-    while (esp_sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < 10) {
-        ESP_LOGI(TAG, "시간 동기화 대기 중... (%d/10)", retry);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    while (timeinfo.tm_year < (2025 - 1900)) { // 2025년 이전이면 시간 안 맞은 것으로 간주
+        ESP_LOGI(TAG, "시간 동기화 대기 중... (%d)", ++retry);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        
+        // (옵션) 너무 오래 걸리면 와이파이 재연결 트리거 등을 넣을 수도 있음
     }
+    ESP_LOGI(TAG, "시간 동기화 완료! 현재 시간: %s", asctime(&timeinfo));
 }
 
 // 4. I2S 마이크 설정
@@ -153,11 +161,20 @@ void app_main(void)
         i2s_read(I2S_NUM_0, samples, 512 * sizeof(int32_t), &bytes_read_val, portMAX_DELAY);
         bytes_read = bytes_read_val;
 
-        // 2. dB 계산
+        // 2. dB 계산 (DC 오프셋 제거 추가)
         double sum = 0;
+        double dc_offset = 0;
         int samples_count = bytes_read / sizeof(int32_t);
+        
+        // 1차 루프: 평균값(DC 성분) 구하기
         for (int i = 0; i < samples_count; i++) {
-            double val = (double)(samples[i] >> 8); 
+             dc_offset += (double)(samples[i] >> 8);
+        }
+        dc_offset /= samples_count; // 평균 구함
+
+        // 2차 루프: 편차 제곱의 합 구하기 (분산)
+        for (int i = 0; i < samples_count; i++) {
+            double val = (double)(samples[i] >> 8) - dc_offset; // [중요] 평균을 빼줌
             sum += val * val;
         }
         
@@ -173,9 +190,17 @@ void app_main(void)
 
                 int len = snprintf(tx_buffer, sizeof(tx_buffer), "%s,%lld,%.2f", MY_NODE_ID, time_us, db);
                 
-                sendto(sock, tx_buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+                // ================= [수정된 부분 시작] =================
+                // 기존의 sendto(...) 한 줄을 지우고 아래 내용을 붙여넣으세요.
+                int err = sendto(sock, tx_buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+                if (err < 0) {
+                    ESP_LOGE(TAG, "전송 실패: errno %d", errno);
+                    // 만약 에러가 계속되면 여기서 break를 걸어 루프를 탈출하거나,
+                    // 소켓을 close(sock) 하고 다시 만드는 로직을 추가할 수 있습니다.
+                }
+                // ================= [수정된 부분 끝] =================
                 
-                ESP_LOGI(TAG, "💥 쾅! %.1fdB", db);
+                ESP_LOGI(TAG, "쾅! %.1fdB", db);
                 vTaskDelay(100 / portTICK_PERIOD_MS); 
             }
         }
