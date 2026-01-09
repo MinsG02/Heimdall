@@ -52,7 +52,7 @@ git merge main
 
 ```bash
 # 변경된 파일 장바구니에 담기
-git add .
+git add . 
 
 # 로컬에 저장(커밋)하기 - 메시지는 명확하게!
 git commit -m "마이크 센서 데이터 수신 기능 추가"
@@ -96,6 +96,7 @@ git log --oneline --graph --all
 | 변경사항 올리기 | `git add .` → `git commit -m "메시지"` → `git push origin feature/이니셜` |
 | 메인 변경사항 반영 | `git merge main` |
 
+<<<<<<< HEAD
 1단계: 최초 브랜치 생성 (노트북)
 처음 작업을 시작할 때 내 전용 작업 공간(gms)을 만드는 과정입니다.
 
@@ -205,6 +206,102 @@ git checkout gms
 git merge main
 
 git push origin gms
+=======
+---
+
+# 🌊 Git 협업 워크플로우 가이드
+
+이 문서는 **[Heimdall]** 프로젝트 협업을 위한 Git 사용 규칙과 명령어 모음입니다.  
+본인의 브랜치(예: `gms`)를 기준으로 작업하며, `main` 브랜치와 동기화하는 방법을 설명합니다.
+
+---
+
+## 1. 🆕 최초 브랜치 생성 (첫 작업 시)
+
+작업을 시작할 때 나만의 작업 공간(브랜치)을 생성하고 원격 저장소에 등록합니다.
+
+```bash
+# 1) 브랜치 생성 및 이동 (gms 대신 본인 이니셜/기능명 사용)
+git checkout -b gms
+
+# 2) 원격 저장소(GitHub)에 내 브랜치 등록 및 추적(Tracking) 설정
+git push -u origin gms
+```
+
+---
+
+## 2. 💻 다른 컴퓨터에서 작업 가져오기 (환경 변경 시)
+
+노트북에서 작업하던 브랜치를 데스크탑 등 다른 PC로 가져올 때 사용합니다.
+
+```bash
+# 1) 원격 저장소 정보 갱신 (새로운 브랜치 목록 불러오기)
+git fetch origin
+
+# 2) 내 브랜치(gms)를 가져오면서 이동하기
+git checkout gms
+
+# 3) 확인 (* 표시가 gms에 있는지 확인)
+git branch
+```
+
+> ⚠️ 만약 `git checkout gms`가 안 되면 아래로 생성해서 이동:
+```bash
+git checkout -b gms origin/gms
+```
+
+---
+
+## 3. 🚀 작업하고 올리기 (일상 루틴)
+
+코드 수정 후 저장하고 GitHub에 올리는 반복 과정입니다.
+
+```bash
+# 1) 변경된 파일 스테이징
+git add .
+
+# 2) 커밋 (작업 내용 명시)
+git commit -m "feat: 기능 추가 및 수정 내용 작성"
+
+# 3) 내 브랜치에 업로드 (Push)
+git push origin gms
+```
+
+---
+
+## 4. 🔄 Main 브랜치와 동기화 (Update)
+
+`main`의 최신 내용을 내 브랜치에 반영합니다.
+
+```bash
+# 1) 메인 브랜치로 이동
+git checkout main
+
+# 2) GitHub의 최신 main 내용 당겨오기
+git pull origin main
+
+# 3) 다시 내 작업 브랜치로 복귀
+git checkout gms
+
+# 4) 최신 main 내용을 내 브랜치에 합치기 (Merge)
+git merge main
+# (Vim 에디터가 열리면 ':q' 또는 ':wq' 입력 후 엔터)
+
+# 5) 최신화된 내 브랜치를 원격에 업로드
+git push origin gms
+```
+
+---
+
+## 📝 요약 치트시트 (Cheat Sheet)
+
+| 상황 | 명령어 순서 |
+|---|---|
+| 새 PC 세팅 | `git fetch origin` → `git checkout gms` |
+| 작업 후 퇴근 | `git add .` → `git commit -m "메시지"` → `git push origin gms` |
+| 동기화 (Sync) | `git checkout main` → `git pull origin main` → `git checkout gms` → `git merge main` → `git push origin gms` |
+
+>>>>>>> main
 
 
 
