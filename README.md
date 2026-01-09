@@ -114,7 +114,7 @@ git checkout -b gms
 # 2. 원격 저장소(GitHub)에 내 브랜치 등록 및 추적(Tracking) 설정
 git push -u origin gms
 
-2. 💻 다른 컴퓨터에서 작업 가져오기 (환경 변경 시)
+## 2. 💻 다른 컴퓨터에서 작업 가져오기 (환경 변경 시)
 노트북에서 작업하던 브랜치를 데스크탑 등 다른 PC로 가져올 때 사용합니다.
 
 # 1. 원격 저장소 정보 갱신 (새로운 브랜치 목록 불러오기)
@@ -126,7 +126,7 @@ git checkout gms
 # 3. 확인 (초록색 혹은 * 표시가 gms에 있는지 확인)
 git branch
 
-3. 🚀 작업하고 올리기 (일상 루틴)
+## 3. 🚀 작업하고 올리기 (일상 루틴)
 코드 수정 후 저장하고 GitHub에 올리는 반복 과정입니다.
 # 1. 변경된 파일 스테이징
 git add .
@@ -137,7 +137,7 @@ git commit -m "feat: 기능 추가 및 수정 내용 작성"
 # 3. 내 브랜치에 업로드 (Push)
 git push origin gms
 
-4. 🔄 Main 브랜치와 동기화 (Update)
+## 4. 🔄 Main 브랜치와 동기화 (Update)
 # 1. 메인 브랜치로 이동
 git checkout main
 
@@ -155,4 +155,7 @@ git merge main
 git push origin gms
 
 
-📝 요약 치트시트 (Cheat Sheet)상황명령어 순서새 PC 세팅git fetch origin → git checkout gms작업 후 퇴근git add . → git commit -m "메시지" → git push origin gms동기화 (Sync)checkout main → pull → checkout gms → merge main → push
+📝 요약 치트시트 (Cheat Sheet)
+새 PC 세팅 git fetch origin → git checkout gms
+작업 후 퇴근 git add . → git commit -m "메시지" → git push origin gms
+동기화(Sync) checkout main → pull → checkout gms → merge main → push
