@@ -11,36 +11,41 @@
 #include "nvs_flash.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
-#include "driver/i2s.h"      // I2S (Legacy)
-#include "driver/gpio.h"     // <--- [핵심 수정] 이 헤더가 없어서 에러가 났었습니다!
-#include "esp_sntp.h"        // <--- [수정] sntp.h 대신 esp_sntp.h 사용 (v5.x 표준)
+#include "driver/i2s.h"
+#include "driver/gpio.h"
+#include "esp_sntp.h"
 #include "esp_netif.h"
 
 // ================= [사용자 설정 구간] =================
-#define MY_NODE_ID     "NODE_1"       // <--- 보드마다 여기를 바꿔주세요! (NODE_2, NODE_3...)
-#define WIFI_SSID      "Heimdall_Net" // 라즈베리파이 AP 이름
-#define WIFI_PASS      "password1234" // 라즈베리파이 AP 비밀번호
-#define RPI_IP_ADDR    "192.168.50.1" // 라즈베리파이(ipTIME 동글)의 고정 IP
-#define UDP_PORT       3333           // 통신 포트
-#define TRIGGER_DB     60.0           // 소리 감지 임계값 (환경에 따라 50~80 조절 필요)
+#define MY_NODE_ID     "NODE_L"       // ★ 중요: 왼쪽은 NODE_L, 오른쪽은 NODE_R 로 변경!
+#define WIFI_SSID      "Heimdall_Net" 
+#define WIFI_PASS      "password1234" 
+#define RPI_IP_ADDR    "192.168.50.1" 
+#define UDP_PORT       3333
 
-// 핀 설정 (ESP32-C3 SuperMini + INMP441)
-#define I2S_BCK_IO     (GPIO_NUM_4)
-#define I2S_WS_IO      (GPIO_NUM_5)
-#define I2S_DO_IO      (GPIO_NUM_6)
+// [TDOA 설정]
+// 소리 크기(dB)가 아니라 '진동폭(Raw Value)'을 감지합니다.
+// 숫자가 클수록 둔감해집니다. (기본값: 2000 ~ 5000 추천)
+#define TRIGGER_THRESHOLD  3000   
+#define DEBOUNCE_MS        200    // 한 번 감지 후 0.2초간 무시 (중복 전송 방지)
 // ======================================================
 
-static const char *TAG = "HEIMDALL";
+// 핀 설정 (ESP32-C3 SuperMini / ESP32 + INMP441)
+#define I2S_BCK_IO     (GPIO_NUM_2)
+#define I2S_WS_IO      (GPIO_NUM_3)
+#define I2S_DO_IO      (GPIO_NUM_4)
+
+static const char *TAG = "HEIMDALL_TDOA";
 static int sock = -1;
 
-// 1. 와이파이 이벤트 핸들러
+// 와이파이 이벤트 핸들러
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "Wi-Fi 끊김, 재연결 시도...");
+        // ESP_LOGI(TAG, "Wi-Fi 끊김, 재연결..."); // TDOA 성능을 위해 로그 최소화
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
@@ -48,16 +53,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-// 2. 와이파이 초기화
+// 와이파이 초기화
 void wifi_init_sta(void)
 {
     esp_netif_init();
     esp_event_loop_create_default();
     esp_netif_create_default_wifi_sta();
-
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
-
     esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL);
 
@@ -74,35 +77,30 @@ void wifi_init_sta(void)
     esp_wifi_start();
 }
 
-// 3. NTP 시간 동기화 (v5.x 최신 API 적용)
-// 3. NTP 시간 동기화 (수정됨)
+// NTP 시간 동기화 (TDOA의 핵심)
 void initialize_sntp(void)
 {
-    ESP_LOGI(TAG, "시간 동기화(SNTP) 시작...");
-    
+    ESP_LOGI(TAG, "시간 동기화(SNTP) 대기 중...");
     esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, RPI_IP_ADDR); 
     esp_sntp_init();
     
-    // [중요] 시간이 잡힐 때까지 무한 대기 (TDOA 필수)
     time_t now = 0;
     struct tm timeinfo = { 0 };
     int retry = 0;
 
-    while (timeinfo.tm_year < (2025 - 1900)) { // 2025년 이전이면 시간 안 맞은 것으로 간주
-        ESP_LOGI(TAG, "시간 동기화 대기 중... (%d)", ++retry);
+    // 시간이 2025년 이후로 잡힐 때까지 무한 대기
+    while (timeinfo.tm_year < (2025 - 1900)) {
         vTaskDelay(2000 / portTICK_PERIOD_MS);
         time(&now);
         localtime_r(&now, &timeinfo);
-        
-        // (옵션) 너무 오래 걸리면 와이파이 재연결 트리거 등을 넣을 수도 있음
+        if(++retry % 5 == 0) ESP_LOGI(TAG, "동기화 시도 중... (%d)", retry);
     }
     ESP_LOGI(TAG, "시간 동기화 완료! 현재 시간: %s", asctime(&timeinfo));
 }
 
-// 4. I2S 마이크 설정
+// I2S 마이크 설정
 void i2s_init(void) {
-    // ESP-IDF v5.x에서도 레거시 드라이버 사용 가능 (경고는 무시 가능)
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = 16000, 
@@ -110,8 +108,8 @@ void i2s_init(void) {
         .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 4,
-        .dma_buf_len = 512,
+        .dma_buf_count = 4,   // 버퍼 개수 줄임 (Latency 감소)
+        .dma_buf_len = 64,    // 버퍼 길이 줄임 (빠른 인터럽트)
         .use_apll = false
     };
     i2s_pin_config_t pin_config = {
@@ -126,7 +124,7 @@ void i2s_init(void) {
 
 void app_main(void)
 {
-    // [SETUP]
+    // NVS 초기화
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       ESP_ERROR_CHECK(nvs_flash_erase());
@@ -135,11 +133,14 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     wifi_init_sta();
+    
+    // IP 받을 때까지 잠시 대기
     vTaskDelay(3000 / portTICK_PERIOD_MS); 
     
+    // TDOA는 시간이 생명이므로 동기화 필수
     initialize_sntp();
     
-    // UDP 소켓
+    // UDP 소켓 생성
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     struct sockaddr_in dest_addr;
     dest_addr.sin_addr.s_addr = inet_addr(RPI_IP_ADDR);
@@ -148,62 +149,57 @@ void app_main(void)
 
     i2s_init();
 
-    int32_t *samples = malloc(512 * sizeof(int32_t));
+    // 데이터 읽기용 버퍼
+    int32_t *samples = malloc(256 * sizeof(int32_t));
     char tx_buffer[64];
     size_t bytes_read = 0;
+    int64_t last_trigger_time = 0;
 
-    ESP_LOGI(TAG, "=== 감시 시작 (%s) ===", MY_NODE_ID);
+    ESP_LOGI(TAG, "=== TDOA 센서 가동 (%s) ===", MY_NODE_ID);
+    ESP_LOGI(TAG, "박수를 쳐서 임계값(%d)을 넘기세요.", TRIGGER_THRESHOLD);
 
-    // [LOOP]
     while (1) {
-        // 1. 마이크 읽기
-        size_t bytes_read_val = 0;
-        i2s_read(I2S_NUM_0, samples, 512 * sizeof(int32_t), &bytes_read_val, portMAX_DELAY);
-        bytes_read = bytes_read_val;
-
-        // 2. dB 계산 (DC 오프셋 제거 추가)
-        double sum = 0;
-        double dc_offset = 0;
+        // I2S 데이터 읽기 (여기서 블로킹됨)
+        i2s_read(I2S_NUM_0, samples, 256 * sizeof(int32_t), &bytes_read, portMAX_DELAY);
+        
         int samples_count = bytes_read / sizeof(int32_t);
-        
-        // 1차 루프: 평균값(DC 성분) 구하기
+        bool triggered = false;
+        int32_t max_val = 0;
+
+        // 버퍼를 훑으며 피크값 찾기
         for (int i = 0; i < samples_count; i++) {
-             dc_offset += (double)(samples[i] >> 8);
-        }
-        dc_offset /= samples_count; // 평균 구함
+            // INMP441 데이터 정규화 및 절대값 (DC Offset 무시하고 순간 변화량 감지)
+            // >> 14는 노이즈를 줄이고 숫자를 다루기 쉽게 만듦
+            int32_t val = abs(samples[i] >> 14);
+            
+            if (val > max_val) max_val = val;
 
-        // 2차 루프: 편차 제곱의 합 구하기 (분산)
-        for (int i = 0; i < samples_count; i++) {
-            double val = (double)(samples[i] >> 8) - dc_offset; // [중요] 평균을 빼줌
-            sum += val * val;
-        }
-        
-        if (samples_count > 0) {
-            double rms = sqrt(sum / samples_count);
-            double db = 20 * log10(rms); 
-
-            // 3. 전송
-            if (db > TRIGGER_DB) {
-                struct timeval tv_now;
-                gettimeofday(&tv_now, NULL);
-                int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
-
-                int len = snprintf(tx_buffer, sizeof(tx_buffer), "%s,%lld,%.2f", MY_NODE_ID, time_us, db);
-                
-                // ================= [수정된 부분 시작] =================
-                // 기존의 sendto(...) 한 줄을 지우고 아래 내용을 붙여넣으세요.
-                int err = sendto(sock, tx_buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-                if (err < 0) {
-                    ESP_LOGE(TAG, "전송 실패: errno %d", errno);
-                    // 만약 에러가 계속되면 여기서 break를 걸어 루프를 탈출하거나,
-                    // 소켓을 close(sock) 하고 다시 만드는 로직을 추가할 수 있습니다.
-                }
-                // ================= [수정된 부분 끝] =================
-                
-                ESP_LOGI(TAG, "쾅! %.1fdB", db);
-                vTaskDelay(100 / portTICK_PERIOD_MS); 
+            if (val > TRIGGER_THRESHOLD) {
+                triggered = true;
+                break; // 하나라도 넘으면 즉시 반응
             }
         }
+
+        // 트리거 발생 시 시간 측정 및 전송
+        if (triggered) {
+            struct timeval tv_now;
+            gettimeofday(&tv_now, NULL); 
+            int64_t current_time = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
+
+            // 디바운스: 마지막 전송 후 일정 시간이 지났는지 확인
+            if (current_time - last_trigger_time > (DEBOUNCE_MS * 1000)) {
+                
+                // 패킷 전송: "ID,마이크로초시간,피크값"
+                int len = snprintf(tx_buffer, sizeof(tx_buffer), "%s,%lld,%d", MY_NODE_ID, current_time, max_val);
+                sendto(sock, tx_buffer, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+                
+                ESP_LOGI(TAG, "BANG! Time: %lld us | Peak: %d", current_time, max_val);
+                last_trigger_time = current_time;
+            }
+        }
+        
+        // 너무 잦은 루프 방지 (I2S DMA가 있어서 딜레이 없어도 되지만 안전상 최소값)
+        // vTaskDelay(1); // TDOA에서는 딜레이를 아예 없애거나 최소화해야 함
     }
     free(samples);
 }
