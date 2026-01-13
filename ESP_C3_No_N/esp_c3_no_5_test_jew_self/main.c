@@ -17,12 +17,12 @@
 #include "esp_netif.h"
 
 // ================= [사용자 설정 구간] =================
-#define MY_NODE_ID     "NODE_5"       // <--- 2번 보드는 "NODE_2"로 변경 필수!
-#define WIFI_SSID      "Parroy" // 라즈베리파이 핫스팟 이름 Heimdall_Net
-#define WIFI_PASS      "88588858" // 비밀번호 password1234
-#define RPI_IP_ADDR    "10.85.246.114" // 라즈베리파이 IP 주소 (정확해야 함) 165.229.125.85로 바꿈 원래는 192.168.50.1
+#define MY_NODE_ID     "NODE_1"       // 보드 ID
+#define WIFI_SSID      "Parroy" // 핫스팟 이름
+#define WIFI_PASS      "88588858" // 비밀번호
+#define RPI_IP_ADDR    "10.12.26.241" // 라즈베리파이 IP
 #define UDP_PORT       3333
-#define TRIGGER_DB     60.0           // 감지 임계값
+#define TRIGGER_DB     0.0           // 감지 임계값 (로그 보면서 조절 필요)
 // ======================================================
 
 // 핀 설정 (ESP32-C3 SuperMini + INMP441)
