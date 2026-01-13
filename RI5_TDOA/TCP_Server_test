@@ -1,0 +1,54 @@
+import socket
+
+# ================= [SETTINGS] =================
+HOST = '0.0.0.0'  # Allow all IP connections
+PORT = 3333       # Must match ESP32 port
+# ==========================================
+
+def start_tcp_server():
+    # 1. Create TCP Socket
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    # 2. Bind Address
+    try:
+        server_socket.bind((HOST, PORT))
+    except Exception as e:
+        print(f"❌ Failed to bind port: {e}")
+        return
+
+    # 3. Listen
+    server_socket.listen()
+    print(f"\n🚀 [TCP] Heimdall Server Listening... (Port {PORT})")
+    print(f"📡 Waiting for connection...")
+
+    while True:
+        try:
+            # 4. Accept Connection
+            client_sock, addr = server_socket.accept()
+            print(f"✅ Connection established! Client address: {addr}")
+
+            # 5. Data Reception Loop
+            while True:
+                data = client_sock.recv(1024)
+                if not data:
+                    print("⚠️ Connection lost. Returning to listening mode.")
+                    break
+                
+                # Print Data
+                message = data.decode('utf-8').strip()
+                print(f"📩 Received Data: {message}")
+
+            client_sock.close()
+            
+        except KeyboardInterrupt:
+            print("\nShutting down server.")
+            break
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            break
+
+    server_socket.close()
+
+if __name__ == "__main__":
+    start_tcp_server()
