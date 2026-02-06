@@ -313,4 +313,4 @@ void app_main(void) {
     free(pcm16);
 }
 
-개선 코드와 PCM+dB+파형정보 시각화 버전
+//개선 코드와 PCM+dB+파형정보 시각화 버전
